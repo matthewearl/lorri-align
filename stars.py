@@ -31,7 +31,7 @@ __all__ = (
 )
 
 import collections
-import sys
+import math
 
 import cv2
 import numpy
@@ -130,6 +130,8 @@ def extract(im):
         yield Star(x=(x + m['m10'] / m['m00']), y=(y + m['m01'] / m['m00']))
 
 if __name__ == "__main__":
+    import sys
+
     im = cv2.imread(sys.argv[1], cv2.IMREAD_GRAYSCALE)
 
     for s in extract(im):

@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 # Copyright (c) 2015 Matthew Earl
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,6 +32,10 @@ __all__ = (
     'AlignmentFailed',
     'align_pair',
 )
+
+import random
+
+import numpy
 
 # Maximum number of RANSAC iterations to run before giving up.
 MAX_ITERS = 500
@@ -147,8 +153,11 @@ def align_pair(stars1, stars2):
         first image, to star coordinates in the second image.
 
     """
+    stars1 = list(stars1)
+    stars2 = list(stars2)
+
     for i in range(MAX_ITERS):
-        pairing = _get_pairings(stars1, stars2)
+        pairing = _get_pairing(stars1, stars2)
         if pairing:
             break
     else:
@@ -156,3 +165,19 @@ def align_pair(stars1, stars2):
 
     return _transformation_from_pairing(pairing)
 
+if __name__ == "__main__":
+    import sys
+
+    import cv2
+
+    import stars
+
+    if sys.argv[1] == "align_pair":
+        im1 = cv2.imread(sys.argv[2], cv2.IMREAD_GRAYSCALE)
+        im2 = cv2.imread(sys.argv[3], cv2.IMREAD_GRAYSCALE)
+        stars1 = stars.extract(im1)
+        stars2 = stars.extract(im2)
+
+        A = align_pair(stars1, stars2)
+
+        print A
