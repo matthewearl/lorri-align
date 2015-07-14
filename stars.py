@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # Copyright (c) 2015 Matthew Earl
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -29,6 +30,9 @@ __all__ = (
     'Star',
 )
 
+import collections
+import sys
+
 import cv2
 import numpy
 
@@ -47,8 +51,8 @@ MAX_STARS = 50
 
 class Star(collections.namedtuple('_StarBase', ('x', 'y'))):
     def dist(self, other):
-        return math.sqrt((self.x - other.x)**2 +
-                         (self.y - other.y)**2)
+        return math.sqrt((self.x - other.x) ** 2 +
+                         (self.y - other.y) ** 2)
 
     @property
     def pos(self):
@@ -61,9 +65,9 @@ class Star(collections.namedtuple('_StarBase', ('x', 'y'))):
 class ExtractFailed(Exception):
     pass
 
-def get_stars(im):
+def extract(im):
     """
-    Return an iterable of star coordinates, given an input image.o
+    Return an iterable of star coordinates, given an input image.
 
     Arguments:
         im: Image to extract star information from. 2-dimensional input array
@@ -78,17 +82,18 @@ def get_stars(im):
     # Threshold the image to a level which shows a good number of stars.
     hist = numpy.histogram(im, bins=range(256))[0]
     for thr in range(256):
-        if sum(hist[thr + 1:]) < target:
+        if sum(hist[thr + 1:]) < (im.shape[0] * im.shape[1] *
+                                  THRESHOLD_FRACTION):
             break
     else:
         raise ExtractFailed("Image too bright")
     thr += THRESHOLD_BIAS
-    _, thresh_im = cv2.threshold(im, thr + 2, 255, cv2.THRESH_BINARY)
+    _, thresh_im = cv2.threshold(im, thr, 255, cv2.THRESH_BINARY)
 
     # Dilate the thresholded image so that multiple regions from the same
     # source are combined.
     thresh_im = cv2.dilate(thresh_im, numpy.ones((DILATION_SIZE,
-                                                  DILATION_SIZE))
+                                                  DILATION_SIZE)))
 
     # Detect contiguous white regions using findContours. Filter out single
     # pixel regions, as they are likely to be noise. The idea here is that each
@@ -117,10 +122,20 @@ def get_stars(im):
                          contours,
                          idx,
                          color=1,
-                         thickness=cv2.CV_FILLED,
+                         thickness=-1,
                          offset=(-x, -y))
         sub_im = im[y:y + h, x:x + w] * sub_im_mask
         m = cv2.moments(sub_im)
 
-        yield _Star(x=(x + m['m10'] / m['m00']), y=(y + m['m01'] / m['m00']))
+        yield Star(x=(x + m['m10'] / m['m00']), y=(y + m['m01'] / m['m00']))
+
+if __name__ == "__main__":
+    im = cv2.imread(sys.argv[1], cv2.IMREAD_GRAYSCALE)
+
+    for s in extract(im):
+        print "{}".format(s)
+        cv2.circle(im, tuple(map(int, s.pos)), radius=5, color=255)
+
+    if len(sys.argv) > 2:
+        cv2.imwrite(sys.argv[2], im * 8.0)
 
