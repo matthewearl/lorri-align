@@ -104,7 +104,7 @@ def extract(im):
     if len(contours) > MAX_STARS:
         raise ExtractFailed("Too many stars ({})".format(len(contours)))
     if len(contours) < MIN_STARS:
-        raise ExtractFailed("Too enough stars ({})".format(len(contours)))
+        raise ExtractFailed("Not enough stars ({})".format(len(contours)))
 
     # For each contiguous white region (contour) in the image, yield its
     # coordinates.  It's coordinates are based on the centre-of-mass of the

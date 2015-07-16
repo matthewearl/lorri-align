@@ -213,12 +213,13 @@ def register_many(stars_seq, reference_idx=0):
     # images. This seems to give good success rates, while not having too much
     # drift.
     for stars2 in stars_it:
-        for stars1, M1 in registered[0] + registered[-REGISTRATION_RETRIES:]:
+        for stars1, M1 in [registered[0]] + registered[-REGISTRATION_RETRIES:]:
             try:
                 M2 = register_pair(stars1, stars2)
             except RegistrationFailed as e:
                 yield RegistrationResult(exception=e, transform=None)
             yield RegistrationResult(exception=None, transform=(M1 * M2))
+        registered.append((stars2, (M1 * M2)))
 
 if __name__ == "__main__":
     import sys
@@ -236,3 +237,32 @@ if __name__ == "__main__":
         A = register_pair(stars1, stars2)
 
         print A
+    if sys.argv[1] == "register_many":
+        fnames = sys.argv[2:]
+        ims = []
+        for fname in fnames:
+            print "Loading {}".format(fname)
+            ims.append(cv2.imread(fname, cv2.IMREAD_GRAYSCALE))
+
+        stars_list = []
+        for fname, im in zip(fnames, ims):
+            try:
+                print "Extracting stars from {}".format(fname)
+                stars_list.append((fname, list(stars.extract(im))))
+            except stars.ExtractFailed as e:
+                print "Failed to extract stars from {}".format(fname)
+
+        for fname, reg_result in zip(
+                      (fname for fname, stars in stars_list),
+                      register_many(stars for fname, stars in stars_list)):
+            if reg_result.exception:
+                assert reg_result.transform is None
+                print "Failed to register {}: {}".format(
+                                fname, reg_result.exception)
+            elif reg_result.transform is not None:
+                assert reg_result.exception is None
+                print "Successfully registered {}".format(fname)
+                print reg_result.transform
+            else:
+                assert False
+
