@@ -21,7 +21,7 @@
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 """
-Routines for aligning images, based upon star locations.
+Routines for registering images, based upon star locations.
 
 This module uses the term "pairing" to mean a list of pairs of stars. A pairing
 gives a partial mapping from stars in one image to stars in another.
@@ -29,10 +29,12 @@ gives a partial mapping from stars in one image to stars in another.
 """
 
 __all__ = (
-    'AlignmentFailed',
-    'align_pair',
+    'RegistrationFailed',
+    'RegistrationResult',
+    'register_pair',
 )
 
+import collections
 import random
 
 import numpy
@@ -46,7 +48,10 @@ NUM_STARS_TO_PAIR = 4
 # Maximum permissable distance between two paired stars.
 MAX_DISTANCE = 5.0
 
-class AlignmentFailed(Exception):
+# Number of registrations that are tried if the initial registration fails.
+REGISTRATION_RETRIES = 3
+
+class RegistrationFailed(Exception):
     pass
 
 def _fits_model(pair, pairing):
@@ -138,9 +143,10 @@ def _transformation_from_pairing(pairing):
     # left (with column vectors).
     R = (U * Vt).T
 
-    return numpy.hstack((R, c2.T - R * c1.T))
+    return numpy.vstack([numpy.hstack((R, c2.T - R * c1.T)),
+                         numpy.matrix([0., 0., 1.])])
 
-def align_pair(stars1, stars2):
+def register_pair(stars1, stars2):
     """
     Align a pair of images, based on their stars.
 
@@ -149,7 +155,7 @@ def align_pair(stars1, stars2):
         stars2: The stars in the second image.
 
     Returns:
-        A 2x3 affine transformation matrix, mapping star coordinates in the
+        A 3x3 affine transformation matrix, mapping star coordinates in the
         first image, to star coordinates in the second image.
 
     """
@@ -161,9 +167,58 @@ def align_pair(stars1, stars2):
         if pairing:
             break
     else:
-        raise AlignmentFailed
+        raise RegistrationFailed
 
     return _transformation_from_pairing(pairing)
+
+class RegistrationResult(collections.namedtuple('_RegistrationResultBase',
+                            ('exception', 'transform'))):
+    """
+    The result of a single image's registration.
+   
+    One of these is returned for each input image in a `register_many` call.
+
+    """
+    def result():
+        if self.exception:
+            raise self.exception
+        return transform
+
+def register_many(stars_seq, reference_idx=0):
+    """
+    Register a sequence of images, based on their stars.
+
+    Arguments:
+        stars_list: A list of iterables of stars. Each element corresponds with
+            the stars from a particular image.
+
+    Returns:
+        An iterable of `RegistrationResult`, with one per input image. The
+        first result is always the identity matrix, whereas subsequent results
+        give the transformation to map the first image onto the corresponding
+        input image, or a `RegistrationFailed` exception in the case that
+        registration failed.
+
+    """
+
+    stars_it = iter(stars_seq)
+
+    # The first image is used as the reference, so has the identity
+    # transformation.
+    registered = [(next(stars_it), numpy.matrix(numpy.identity(3)))]
+    yield RegistrationResult(exception=None, transform=registered[0][1])
+
+    # For each other image, first attempt to register it with the first image,
+    # and then with the last `REGISTRATION_RETRIES` successfully registered
+    # images. This seems to give good success rates, while not having too much
+    # drift.
+    for stars2 in stars_it:
+        for stars1, M1 in registered[0] + registered[-REGISTRATION_RETRIES:]:
+            try:
+                M2 = register_pair(stars1, stars2)
+            except RegistrationFailed as e:
+                yield RegistrationResult(exception=e, transform=None)
+            yield RegistrationResult(exception=None, transform=(M1 * M2))
 
 if __name__ == "__main__":
     import sys
@@ -172,12 +227,12 @@ if __name__ == "__main__":
 
     import stars
 
-    if sys.argv[1] == "align_pair":
+    if sys.argv[1] == "register_pair":
         im1 = cv2.imread(sys.argv[2], cv2.IMREAD_GRAYSCALE)
         im2 = cv2.imread(sys.argv[3], cv2.IMREAD_GRAYSCALE)
         stars1 = stars.extract(im1)
         stars2 = stars.extract(im2)
 
-        A = align_pair(stars1, stars2)
+        A = register_pair(stars1, stars2)
 
         print A
