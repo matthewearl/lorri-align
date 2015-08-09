@@ -35,11 +35,9 @@ class _BoundingRect(collections.namedtuple('_Rect', ('x', 'y', 'w', 'h'))):
     A rectangle which bounds a set of points.
 
     """
-    def expand(self, points):
-        """Expand the bounding rect with a matrix of points."""
-
-        points = numpy.vstack(numpy.matrix(points), self.corners)
-
+    @classmethod
+    def from_points(cls, points):
+        """Create a bounding rectangle from a set of points."""
         top_left = numpy.min(points, axis=1)
         bottom_right = numpy.max(points, axis=1)
 
@@ -47,6 +45,14 @@ class _BoundingRect(collections.namedtuple('_Rect', ('x', 'y', 'w', 'h'))):
                              top_left[1, 0],
                              bottom_right[0, 0] - top_left[0, 0],
                              bottom_right[1, 0] - top_left[1, 0])
+        
+
+    def expand(self, points):
+        """Expand the bounding rect with a matrix of points."""
+        points = numpy.vstack(numpy.matrix(points), self.corners)
+
+        return self.from_points(points)
+
 
     @property
     def corners(self):
@@ -60,6 +66,7 @@ class _BoundingRect(collections.namedtuple('_Rect', ('x', 'y', 'w', 'h'))):
         return self.w, self.h
 
 def _translate_matrix(v):
+    """Return a translation matrix."""
     out = numpy.identity(3)
     out[:2, 2:] = v
 
@@ -71,13 +78,60 @@ def get_bounding_rect(ims_and_transforms):
 
     Argument:
         ims_and_transforms: Sequence of image and transformation matrices. Each
-            `(im, M)` pair
+            element is an `(im, M)` pair, where `M` converts points in a
+            reference coordinate frame into the image's coordinate frame.
+
+    """
+    
+    def im_corners(im):
+        return numpy.matrix([0, 0],
+                            [0, im.shape[0]],
+                            [im.shape[1], 0],
+                            [im.shape[1], im.shape[0]],
+                            dtype=numpy.float64).T
+
+    points = numpy.hstack([M.I * im_corners(im)
+                           for im, M in ims_and_transforms])
+
+    return _BoundingRect.from_points(points)
+
+class StackedImage(object):
+    """
+    Represents an image composed of a set of overlaid images.
+
+    Input images are rotated and translated into a reference coordinate system.
+    The output image bounds are determined by a rectangle, whose coordinates
+    are in the same reference coordinate system.
+
+    `get_bounding_rect` is used to obtain the bounding rectangle. For example,
+    to stack a list of (image, transformation) pairs where the output image
+    bounds all the input images:
+
+        stacked = StackedImage(get_bounding_rect(ims_and_transforms))
+        for im, M in ims_and_transforms:
+            stacked.add_image(im, M)
+        # stacked.im is now the stacked image.
+
+    To stack of list of (image, transformation) pairs where the output image
+    bounds just the first image:
+
+        stacked = StackedImage(get_bounding_rect(ims_and_transforms[:1]))
+        for im, M in ims_and_transforms:
+            stacked.add_image(im, M)
+        # stacked.im is now the stacked image.
 
     """
 
-class StackedImage(object):
-
     def __init__(self, rect):
+        """
+        Initialize a new StackedImage.
+
+        Arguments:
+            rect: Rectangle defining the bounds of the output image, relative
+                to the reference coordinate system. Bounding rectangles are
+                obtained by calling `get_bounding_rect`.
+
+        """
         self._rect = _Rect(*rect)
         self._im = numpy.zeros((self._rect.h, self._rect.w))
 
@@ -86,12 +140,6 @@ class StackedImage(object):
         return self._im
 
     def add_image(im, M):
-        corners = M.I * numpy.matrix([[0, 0],
-                                      [0, im.shape[0]],
-                                      [im.shape[1], 0],
-                                      [im.shape[1], im.shape[0]]]).T
-        self._rect = self._rect.expand(corners)
-
         cv2.warpAffine(im,
                        M * _translate_matrix(-self._rect.corners[:, 0]),
                        self._rect.size,
