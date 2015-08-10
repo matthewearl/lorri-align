@@ -27,6 +27,7 @@ import time
 
 import cv2
 
+import cache
 import reg
 import stack
 import stars
@@ -85,15 +86,11 @@ if args.update_metadata:
     cache.update_metadata()
 
 metadata = [d for d in cache.load_metadata() if
-                vars(args)['from'] < d["timestamp"] < args.to and
+                vars(args)['from'] <= d["timestamp"] <= args.to and
                 re.match(args.exposure, d["exposure"])]
 
-from pprint import pprint as pp
-pp(metadata)
-
+print "Checking for {} images".format(len(metadata))
 cache.check_images(metadata, download_missing=args.download_missing)
-
-import sys; sys.exit(0)
 
 print "Loading images"
 ims = OrderedDict((name, cv2.imread(fname, cv2.IMREAD_GRAYSCALE))

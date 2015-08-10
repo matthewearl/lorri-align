@@ -29,7 +29,7 @@ __all__ = (
     'update_metadata',
     'load_metadata',
     'check_images',
-    'MissingImages',
+    'MissingImage',
 )
 
 import calendar
@@ -63,7 +63,7 @@ def _parse_line(line):
             d["image_path"] = time.strftime(_IMG_FORMAT,
                                             time.gmtime(d["timestamp"]))
         elif cmd.startswith("ExpArr.push"):
-            d["exp"] = cmd.split('"')[1]
+            d["exposure"] = cmd.split('"')[1]
             l.append(d)
             d = {}
 
@@ -92,7 +92,7 @@ def _metadata_gen():
         except _InvalidPageNum:
             return
         
-        page_num += 10
+        page_num += 1
 
 def load_metadata():
     """Load and return the meta-data."""
@@ -110,9 +110,11 @@ def update_metadata():
     updates = []
     for d in _metadata_gen():
         if (len(old_metadata) > 0 and
-            d['timestamp'] == old_metadata[-1]['timestamp']):
+            d['timestamp'] == old_metadata[0]['timestamp']):
             break
         updates.append(d)
+
+    print "Downloaded new metadata for {} files".format(len(updates))
 
     with open(_METADATA_FILE, 'w') as f:
         json.dump(updates + old_metadata, f)
@@ -124,20 +126,20 @@ def _download_image(d):
     with open(d["image_path"], 'w') as out_f:
         out_f.write(in_f.read())
 
-class MissingImages(Exception):
+class MissingImage(Exception):
     pass
 
 def check_images(metadata, download_missing=False):
     """
     Check images for the provided metadata have been downloaded.
 
-    If the `download_missing` argument is False, `MissingImages` is raised for
+    If the `download_missing` argument is False, `MissingImage` is raised for
     any missing images.
     
     """
     for d in metadata:
-        if not os.path.exist(d["image_path"]):
-            if download:
+        if not os.path.exists(d["image_path"]):
+            if download_missing:
                 _download_image(d)
             else:
                 raise MissingImage("Image {} has not been downloaded".format(
