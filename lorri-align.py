@@ -97,6 +97,11 @@ parser.add_argument('--max-brightness', '-b', type=float, required=False,
                     default=MAX_BRIGHTNESS,
                     help='Images with an average value greater than this '
                          'be discarded.')
+parser.add_argument('--black-cutoff', '-k', type=int, required=False,
+                    help='Pixels in the final image with a value darker than '
+                         'this level will be rounded to 0. This is to remove '
+                         'invisible background noise and thereby aid GIF '
+                         'compression')
 args = parser.parse_args()
 
 # Obtain metadata for the requested images, updating the metadata and
@@ -160,7 +165,9 @@ for im_id, M in transforms.items():
     if not any(times[im_id] < times[other_im_id]
                                           <= times[im_id] + MIN_FRAME_INTERVAL
                                         for other_im_id in transforms.keys()):
-        cv2.imwrite(time.strftime(OUT_FORMAT, time.gmtime(times[im_id])),
-                    stacked.im)
+        im = stacked.im
+        if args.black_cutoff:
+            im = im * (im > numpy.ones(im.shape) * args.black_cutoff)
+        cv2.imwrite(time.strftime(OUT_FORMAT, time.gmtime(times[im_id])), im)
         stacked = None
 
