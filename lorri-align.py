@@ -64,6 +64,12 @@ def parse_time(s):
             return calendar.timegm(t)
     raise Exception("Invalid date/time {}".format(s))
 
+def parse_rect(s):
+    out = tuple(map(int, s.split(',')))
+    if len(out) != 4:
+        raise Exception("Invalid rectangle {}".format(s))
+    return out
+
 # Parse the arguments.
 parser = argparse.ArgumentParser(description='Compose LORRI images')
 parser.add_argument('--from', '-f', type=parse_time, required=True,
@@ -80,6 +86,10 @@ parser.add_argument('--download-missing', '-d', action='store_const',
                     const=True, default=False,
                     help='Download missing images from the New Horizons '
                          'website.')
+parser.add_argument('--crop', '-c', type=parse_rect, required=False,
+                    help='Crop the output by the given rectangle. The '
+                         'rectangle is specified as a comma-separated '
+                         'sequence of integers, <x>,<y>,<width>,<height>.')
 args = parser.parse_args()
 
 # Obtain metadata for the requested images, updating the metadata and
@@ -124,6 +134,12 @@ for im_id, reg_result in zip(im_stars.keys(),
 print "Stacking {} / {} images".format(len(transforms), len(ims))
 rect = stack.get_bounding_rect((ims[im_id], M)
                                            for im_id, M in transforms.items())
+if args.crop:
+    rect = (rect[0] + args.crop[0],
+            rect[1] + args.crop[1],
+            args.crop[2],
+            args.crop[3])
+
 stacked = None
 for im_id, M in transforms.items():
     if stacked is None:
