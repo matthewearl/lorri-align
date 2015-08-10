@@ -148,7 +148,7 @@ class StackedImage(object):
 
     def add_image(self, im, M):
         cv2.warpAffine(im,
-                       (M * _translate_matrix(-self._rect.corners[:, 0]))[:2],
+                       (M * _translate_matrix(self._rect.corners[:, 0]))[:2],
                        tuple(int(x) for x in self._rect.size),
                        dst=self._im,
                        borderMode=cv2.BORDER_TRANSPARENT,
