@@ -20,11 +20,16 @@
 #     OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+"""
+Module for downloading and caching LORRI images.
+
+"""
 
 __all__ = (
     'update_metadata',
     'load_metadata',
     'check_images',
+    'MissingImages',
 )
 
 import calendar
@@ -122,12 +127,12 @@ def _download_image(d):
 class MissingImages(Exception):
     pass
 
-def check_images(metadata):
+def check_images(metadata, download_missing=False):
     """
     Check images for the provided metadata have been downloaded.
 
-    If the `download` argument is False, `MissingImages` is raised for any
-    missing images.
+    If the `download_missing` argument is False, `MissingImages` is raised for
+    any missing images.
     
     """
     for d in metadata:
@@ -137,6 +142,4 @@ def check_images(metadata):
             else:
                 raise MissingImage("Image {} has not been downloaded".format(
                                                              d["image_path"]))
-
-update_metadata()
 
