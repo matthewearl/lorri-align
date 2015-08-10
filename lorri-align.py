@@ -26,6 +26,7 @@ import re
 import time
 
 import cv2
+import numpy
 
 import cache
 import reg
@@ -37,6 +38,8 @@ OUT_FORMAT = "data/images/stacked/%Y-%m-%d_%H%M%S_%Z.png"
 ID_FORMAT = "%Y-%m-%d_%H%M%S_%Z"
 
 EXPOSURE_FILTER = r'1[05]0 msec'
+
+MAX_BRIGHTNESS = 50.
 
 # Frames that are less than this number of seconds apart will be stacked into
 # the same output image.
@@ -90,6 +93,10 @@ parser.add_argument('--crop', '-c', type=parse_rect, required=False,
                     help='Crop the output by the given rectangle. The '
                          'rectangle is specified as a comma-separated '
                          'sequence of integers, <x>,<y>,<width>,<height>.')
+parser.add_argument('--max-brightness', '-b', type=float, required=False,
+                    default=MAX_BRIGHTNESS,
+                    help='Images with an average value greater than this '
+                         'be discarded.')
 args = parser.parse_args()
 
 # Obtain metadata for the requested images, updating the metadata and
@@ -112,9 +119,14 @@ ims = OrderedDict((metadata_to_id(d),
                       for d in sorted(metadata, key=lambda d: d['timestamp']))
 times = OrderedDict((metadata_to_id(d), d["timestamp"]) for d in metadata)
 
-print "Extracting stars"
+print "Filtering images which are too bright"
+filtered_ims = OrderedDict((im_id, im) for im_id, im in ims.items()
+                                if numpy.mean(im) <= args.max_brightness)
+
+print "Extracting stars from {} / {} images".format(len(filtered_ims),
+                                                    len(ims))
 im_stars = OrderedDict()
-for im_id, im in ims.items():
+for im_id, im in filtered_ims.items():
     try:
         im_stars[im_id] = list(stars.extract(im))
     except stars.ExtractFailed as e:
