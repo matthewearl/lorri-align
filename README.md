@@ -9,11 +9,11 @@ a flyby animation can be produced:
 The above is generated with:
 
     ./lorri-align.py --from '2015-04-12 03:27:00' --to '2015-07-09 22:37:05' \
-        --crop 555,343,631,1035  
-    convert -delay 5 data/images/stacked/* anim.gif
+        --crop 555,343,631,1035 --black-cutoff 10
+    convert -delay 5 data/images/stacked/*.png -flip -flop -resize 400x655 anim.gif
 
-*Note* pass `-u` and `-d` on the initial invocation in order to grab the
-relevant metadata and imagery from the [John Hopkins LORRI website](http://pluto.jhuapl.edu/soc/Pluto-Encounter/index.php).
+**Note** `-u` and `-d` should be passed on the initial invocation in order to
+grab the relevant metadata and imagery from the [John Hopkins LORRI website](http://pluto.jhuapl.edu/soc/Pluto-Encounter/index.php).
 A generous `time.sleep` is inserted between HTTP requests to avoid DoS'ing the
 website, but please be considerate when running with `-d` and `-u`!
 
