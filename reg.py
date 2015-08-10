@@ -46,7 +46,7 @@ MAX_ITERS = 500
 NUM_STARS_TO_PAIR = 4
 
 # Maximum permissable distance between two paired stars.
-MAX_DISTANCE = 5.0
+MAX_DISTANCE = 3.0
 
 # Number of registrations that are tried if the initial registration fails.
 REGISTRATION_RETRIES = 3
@@ -200,7 +200,6 @@ def register_many(stars_seq, reference_idx=0):
         registration failed.
 
     """
-
     stars_it = iter(stars_seq)
 
     # The first image is used as the reference, so has the identity
@@ -217,8 +216,13 @@ def register_many(stars_seq, reference_idx=0):
             try:
                 M2 = register_pair(stars1, stars2)
             except RegistrationFailed as e:
-                yield RegistrationResult(exception=e, transform=None)
-            yield RegistrationResult(exception=None, transform=(M1 * M2))
+                continue
+            else:
+                yield RegistrationResult(exception=None, transform=(M1 * M2))
+                break
+        else:
+            yield RegistrationResult(exception=RegistrationFailed(),
+                                     transform=None)
         registered.append((stars2, (M1 * M2)))
 
 if __name__ == "__main__":
