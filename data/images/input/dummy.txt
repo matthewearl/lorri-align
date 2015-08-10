@@ -1,0 +1,1 @@
+Dummy file so that git creates the ./data/images/input directory
