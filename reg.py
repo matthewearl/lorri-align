@@ -109,6 +109,25 @@ def _get_pairing(stars1, stars2):
 
     return pairing
 
+def _get_valid_pairing(stars1, stars2):
+    """
+    Return a complete pairing that defines a consistent model.
+
+    This function uses a RANSAC-style approach to find a concensus set. If no
+    such set 
+
+    """
+    stars1 = list(stars1)
+    stars2 = list(stars2)
+
+    for i in range(MAX_ITERS):
+        pairing = _get_pairing(stars1, stars2)
+        if pairing:
+            break
+    else:
+        raise RegistrationFailed
+    return pairing
+
 def _transformation_from_pairing(pairing):
     """
     Return an affine transformation [R | T] such that:
@@ -159,17 +178,7 @@ def register_pair(stars1, stars2):
         first image, to star coordinates in the second image.
 
     """
-    stars1 = list(stars1)
-    stars2 = list(stars2)
-
-    for i in range(MAX_ITERS):
-        pairing = _get_pairing(stars1, stars2)
-        if pairing:
-            break
-    else:
-        raise RegistrationFailed
-
-    return _transformation_from_pairing(pairing)
+    return _transformation_from_pairing(_get_valid_pairing(stars1, stars2))
 
 class RegistrationResult(collections.namedtuple('_RegistrationResultBase',
                             ('exception', 'transform'))):
@@ -225,6 +234,71 @@ def register_many(stars_seq, reference_idx=0):
                                      transform=None)
         registered.append((stars2, (M1 * M2)))
 
+def _draw_pairing(pairing, im1, im2, stars1, stars2):
+    """
+    Produce a sequence of images to illustrate a particular pairing.
+
+    """
+    assert im1.shape == im2.shape
+    SCALE_FACTOR = 0.4
+    
+    new_size = (int(im1.shape[1] * SCALE_FACTOR),
+                int(im1.shape[0] * SCALE_FACTOR))
+    im1 = cv2.resize(im1, new_size)
+    im2 = cv2.resize(im2, new_size)
+
+    def boost_brightness(im):
+        return numpy.min([im.astype(numpy.float64) * 16,
+                          255. * numpy.ones(im.shape)],
+                         axis=0).astype(numpy.uint8)
+
+    im1 = cv2.cvtColor(boost_brightness(im1), cv2.COLOR_GRAY2RGB)
+    im2 = cv2.cvtColor(boost_brightness(im2), cv2.COLOR_GRAY2RGB)
+
+    def star_pos(s):
+        return tuple(int(x * SCALE_FACTOR) for x in s.pos)
+
+    def draw_stars(im, stars, color):
+        for s in stars:
+            pos = star_pos(s)
+            cv2.circle(im, pos, radius=5, color=color)
+
+    def output_image(name, im1, im2):
+        im = numpy.hstack([im1, im2])
+        cv2.imwrite(name, im)
+    
+    draw_stars(im1, stars1, color=(0, 0, 255))
+    draw_stars(im2, stars2, color=(0, 0, 255))
+
+    step_num = 0
+    output_image("step{}.png".format(step_num), im1, im2)
+    step_num += 1
+
+    LINE_COLOURS = [(255, 0, 0),
+                    (0, 255, 0),
+                    (0, 0, 255),
+                    (0, 255, 255),
+                    (255, 0, 255),
+                    (255, 255, 0)]
+
+    for idx, (s1, s2) in enumerate(pairing):
+        im1_copy = im1.copy()
+        im2_copy = im2.copy()
+        draw_stars(im1, [s1], color=(255, 255, 0))
+        draw_stars(im2, [s2], color=(255, 255, 0))
+
+        draw_stars(im1_copy, [s1], color=(0, 255, 255))
+        draw_stars(im2_copy, [s2], color=(0, 255, 255))
+        output_image("step{}.png".format(step_num), im1_copy, im2_copy)
+        step_num += 1
+
+        for idx2, (t1, t2) in enumerate(pairing[:idx]):
+            cv2.line(im1_copy, star_pos(t1), star_pos(s1), LINE_COLOURS[idx2])
+            cv2.line(im2_copy, star_pos(t2), star_pos(s2), LINE_COLOURS[idx2])
+        
+        output_image("step{}.png".format(step_num), im1_copy, im2_copy)
+        step_num += 1
+
 if __name__ == "__main__":
     import sys
 
@@ -241,6 +315,15 @@ if __name__ == "__main__":
         A = register_pair(stars1, stars2)
 
         print A
+    if sys.argv[1] == "draw_pairing":
+        im1 = cv2.imread(sys.argv[2], cv2.IMREAD_GRAYSCALE)
+        im2 = cv2.imread(sys.argv[3], cv2.IMREAD_GRAYSCALE)
+        stars1 = list(stars.extract(im1))
+        stars2 = list(stars.extract(im2))
+
+        pairing = _get_valid_pairing(stars1, stars2)
+        _draw_pairing(pairing, im1, im2, stars1, stars2)
+        
     if sys.argv[1] == "register_many":
         fnames = sys.argv[2:]
         ims = []
