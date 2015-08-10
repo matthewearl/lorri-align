@@ -32,8 +32,9 @@ import reg
 import stack
 import stars
 
-IN_FORMAT = "data/images/input/%Y-%m-%d_%H%M%S_%Z.jpg"
+IN_FORMAT = cache.IMG_FORMAT
 OUT_FORMAT = "data/images/stacked/%Y-%m-%d_%H%M%S_%Z.png"
+ID_FORMAT = "%Y-%m-%d_%H%M%S_%Z"
 
 EXPOSURE_FILTER = r'1[05]0 msec'
 
@@ -51,6 +52,7 @@ def parse_time(s):
         (s + ' UTC', '%Y-%m-%d %H:%M %Z'),
         (s,          '%Y-%m-%d %H:%M:%S %Z'),
         (s + ' UTC', '%Y-%m-%d %H:%M:%S %Z'),
+        (s,          ID_FORMAT),
     ]
     for args in strptime_args:
         try:
@@ -89,37 +91,48 @@ metadata = [d for d in cache.load_metadata() if
                 vars(args)['from'] <= d["timestamp"] <= args.to and
                 re.match(args.exposure, d["exposure"])]
 
-print "Checking for {} images".format(len(metadata))
+print "Checking cache for {} images".format(len(metadata))
 cache.check_images(metadata, download_missing=args.download_missing)
 
 print "Loading images"
-ims = OrderedDict((name, cv2.imread(fname, cv2.IMREAD_GRAYSCALE))
-                                          for name in sorted(sys.argv[1:]))
-times = OrderedDict((name, calendar.timegm(time.strptime(s, IN_FORMAT)))
-                            for name in ims.keys())
+def metadata_to_id(d):
+    return time.strftime(ID_FORMAT, time.gmtime(d["timestamp"]))
+ims = OrderedDict((metadata_to_id(d),
+                   cv2.imread(d["image_path"], cv2.IMREAD_GRAYSCALE))
+                      for d in sorted(metadata, key=lambda d: d['timestamp']))
+times = OrderedDict((metadata_to_id(d), d["timestamp"]) for d in metadata)
 
 print "Extracting stars"
-stars = OrderedDict((name, stars.extract(im)) for name, im in ims.items())
+im_stars = OrderedDict()
+for im_id, im in ims.items():
+    try:
+        im_stars[im_id] = list(stars.extract(im))
+    except stars.ExtractFailed as e:
+        print "Failed to extract stars for {}: {}".format(im_id, e)
 
-print "Registering images"
+print "Registering {} / {} images".format(len(im_stars), len(ims))
 transforms = OrderedDict()
-for name, reg_result in zip(stars.keys(), reg.register_many(stars.values())):
+for im_id, reg_result in zip(im_stars.keys(),
+                             reg.register_many(im_stars.values())):
     try:
         M = reg_result.result()
     except reg.RegistrationFailed as e:
-        print "Failed to register {}: {}".format(name, e)
+        print "Failed to register {}: {}".format(im_id, e)
     else:
-        transforms[name] = M
+        transforms[im_id] = M
 
 print "Stacking {} / {} images".format(len(transforms), len(ims))
-rect = get_bounding_rect(ims[name], (M for name, M in transforms.items()))
+rect = stack.get_bounding_rect((ims[im_id], M)
+                                           for im_id, M in transforms.items())
 stacked = None
-for name, M in transforms:
-    stacked.add_image(ims[name], M)
-
-    if not any(times[name] < t <= times[name] + MIN_FRAME_INTERVAL
-                                                      for t in times.values()):
-        cv2.imwrite(time.strftime(OUT_FORMAT, time.gmtime(times[name])),
+for im_id, M in transforms.items():
+    if stacked is None:
+        stacked = stack.StackedImage(rect)
+    stacked.add_image(ims[im_id], M)
+    if not any(times[im_id] < times[other_im_id]
+                                          <= times[im_id] + MIN_FRAME_INTERVAL
+                                        for other_im_id in transforms.keys()):
+        cv2.imwrite(time.strftime(OUT_FORMAT, time.gmtime(times[im_id])),
                     stacked.im)
         stacked = None
 

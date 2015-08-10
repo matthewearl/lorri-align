@@ -58,10 +58,10 @@ class _BoundingRect(collections.namedtuple('_Rect', ('x', 'y', 'w', 'h'))):
 
     @property
     def corners(self):
-        return numpy.matrix([[x, y],
-                             [x + w, y],
-                             [x, y + h],
-                             [x + w, y + h]]).T
+        return numpy.matrix([[self.x, self.y],
+                             [self.x + self.w, self.y],
+                             [self.x, self.y + self.h],
+                             [self.x + self.w, self.y + self.h]]).T
 
     @property
     def size(self):
@@ -86,16 +86,19 @@ def get_bounding_rect(ims_and_transforms):
     """
 
     def im_corners(im):
-        return numpy.matrix([0, 0],
-                            [0, im.shape[0]],
-                            [im.shape[1], 0],
-                            [im.shape[1], im.shape[0]],
+        return numpy.matrix([[0, 0],
+                             [0, im.shape[0]],
+                             [im.shape[1], 0],
+                             [im.shape[1], im.shape[0]]],
                             dtype=numpy.float64).T
 
-    points = numpy.hstack([M.I * im_corners(im)
+    points = numpy.hstack([M.I * numpy.vstack([im_corners(im),
+                                               numpy.ones((1, 4))])
                            for im, M in ims_and_transforms])
 
-    return _BoundingRect.from_points(points)
+    rect = _BoundingRect.from_points(points)
+
+    return (rect.x, rect.y, rect.w, rect.h)
 
 class StackedImage(object):
     """
@@ -105,9 +108,9 @@ class StackedImage(object):
     The output image bounds are determined by a rectangle, whose coordinates
     are in the same reference coordinate system.
 
-    `get_bounding_rect` is used to obtain the bounding rectangle. For example,
-    to stack a list of (image, transformation) pairs where the output image
-    bounds all the input images:
+    `get_bounding_rect` can be used to obtain the bounding rectangle. For
+    example, to stack a list of (image, transformation) pairs where the output
+    image bounds all the input images:
 
         stacked = StackedImage(get_bounding_rect(ims_and_transforms))
         for im, M in ims_and_transforms:
@@ -130,12 +133,14 @@ class StackedImage(object):
 
         Arguments:
             rect: Rectangle defining the bounds of the output image, relative
-                to the reference coordinate system. Bounding rectangles are
-                obtained by calling `get_bounding_rect`.
+                to the reference coordinate system. The rectangle is a
+                `(x, y, w, h)` tuple, such as the one returned by
+                `get_bounding_rect()`.
 
         """
-        self._rect = _Rect(*rect)
-        self._im = numpy.zeros((self._rect.h, self._rect.w))
+        self._rect = _BoundingRect(*rect)
+        self._im = numpy.zeros((self._rect.h, self._rect.w),
+                               dtype=numpy.uint8)
 
     @property
     def im(self):
@@ -143,8 +148,8 @@ class StackedImage(object):
 
     def add_image(self, im, M):
         cv2.warpAffine(im,
-                       M * _translate_matrix(-self._rect.corners[:, 0]),
-                       self._rect.size,
+                       (M * _translate_matrix(-self._rect.corners[:, 0]))[:2],
+                       tuple(int(x) for x in self._rect.size),
                        dst=self._im,
                        borderMode=cv2.BORDER_TRANSPARENT,
                        flags=cv2.WARP_INVERSE_MAP)

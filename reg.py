@@ -179,10 +179,10 @@ class RegistrationResult(collections.namedtuple('_RegistrationResultBase',
     One of these is returned for each input image in a `register_many` call.
 
     """
-    def result():
+    def result(self):
         if self.exception:
             raise self.exception
-        return transform
+        return self.transform
 
 def register_many(stars_seq, reference_idx=0):
     """

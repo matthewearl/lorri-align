@@ -30,6 +30,7 @@ __all__ = (
     'load_metadata',
     'check_images',
     'MissingImage',
+    'IMG_FORMAT',
 )
 
 import calendar
@@ -41,14 +42,14 @@ import time
 import urllib2
 
 _THUMBNAIL_URL_FORMAT = ("http://pluto.jhuapl.edu/soc/Pluto-Encounter/"
-                        "index.php?page={}")
+                         "index.php?page={}")
 _IMG_URL_PREFIX = 'http://pluto.jhuapl.edu/soc/Pluto-Encounter/'
 _TIMESTAMP_FORMAT = "%Y-%m-%d<br>%H:%M:%S %Z"
 _IMG_PATH = "data/images/input/"
-_IMG_FORMAT = _IMG_PATH + "%Y-%m-%d_%H%M%S_%Z.jpg"
+IMG_FORMAT = _IMG_PATH + "%Y-%m-%d_%H%M%S_%Z.jpg"
 _METADATA_FILE = _IMG_PATH + "metadata.json"
 
-FETCH_SLEEP = 0.2
+FETCH_SLEEP = 1.0 # Avoid spamming 
 
 def _parse_line(line):
     l = []
