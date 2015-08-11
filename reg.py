@@ -40,7 +40,7 @@ import random
 import numpy
 
 # Maximum number of RANSAC iterations to run before giving up.
-MAX_ITERS = 500
+MAX_ITERS = 100000
 
 # Number of stars that must be paired in a given solution.
 NUM_STARS_TO_PAIR = 4
@@ -67,66 +67,33 @@ def _fits_model(pair, pairing):
             return False
     return True
 
-def _get_pairing(stars1, stars2):
-    """
-    Generate a random pairing.
+def _pick_random_model(stars1, stars2):
+    return zip(random.sample(stars1, 2), random.sample(stars2, 2))
 
-    Arguments:
-        stars1: Stars in the first image.
-        stars2: Stars in the second image.
-
-    Returns:
-        A list of NUM_STARS_TO_PAIR pairs of stars, or None. The first of each
-        pair is an element of stars1, and the second of each pair is an element
-        of stars2.
-
-        None is returned if finding a pairing was unsuccessful.
-
-    """
-    pairing = []
-    stars1 = list(stars1)
-    stars2 = list(stars2)
-
-    random.shuffle(stars1)
-    random.shuffle(stars2)
-    
-    def find_pair():
-        """Find a pair which fits the model."""
-        for s1 in stars1:
-            for s2 in stars2:
-                if _fits_model((s1, s2), pairing):
-                    return s1, s2
-        return None
-
-    for i in range(NUM_STARS_TO_PAIR):
-        pair = find_pair()
-        if not pair:
-            return None
-        s1, s2 = pair
-        stars1.remove(s1)
-        stars2.remove(s2)
-        pairing.append((s1, s2))
-
-    return pairing
-
-def _get_valid_pairing(stars1, stars2):
-    """
-    Return a complete pairing that defines a consistent model.
-
-    This function uses a RANSAC-style approach to find a concensus set. If no
-    such set 
-
-    """
+def _find_pairing(stars1, stars2):
     stars1 = list(stars1)
     stars2 = list(stars2)
 
     for i in range(MAX_ITERS):
-        pairing = _get_pairing(stars1, stars2)
-        if pairing:
-            break
-    else:
-        raise RegistrationFailed
-    return pairing
+        model = _pick_random_model(stars1, stars2)
+        if not _fits_model(model[1], model[:1]):
+            continue
+
+        for s1 in stars1:
+            if s1 in (pair[0] for pair in model):
+                continue
+            for s2 in stars2:
+                if s2 in (pair[1] for pair in model):
+                    continue
+                if _fits_model((s1, s2), model):
+                    model.append((s1, s2))
+
+        if len(model) >= NUM_STARS_TO_PAIR:
+            if len(model) > NUM_STARS_TO_PAIR:
+                print len(model)
+            return model
+
+    raise RegistrationFailed
 
 def _transformation_from_pairing(pairing):
     """
@@ -178,7 +145,7 @@ def register_pair(stars1, stars2):
         first image, to star coordinates in the second image.
 
     """
-    return _transformation_from_pairing(_get_valid_pairing(stars1, stars2))
+    return _transformation_from_pairing(_find_pairing(stars1, stars2))
 
 class RegistrationResult(collections.namedtuple('_RegistrationResultBase',
                             ('exception', 'transform'))):
@@ -323,7 +290,7 @@ if __name__ == "__main__":
         stars1 = list(stars.extract(im1))
         stars2 = list(stars.extract(im2))
 
-        pairing = _get_valid_pairing(stars1, stars2)
+        pairing = _find_pairing(stars1, stars2)
         _draw_pairing(pairing, im1, im2, stars1, stars2)
         
     if sys.argv[1] == "register_many":
