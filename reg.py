@@ -71,6 +71,12 @@ def _pick_random_model(stars1, stars2):
     return zip(random.sample(stars1, 2), random.sample(stars2, 2))
 
 def _find_pairing(stars1, stars2):
+    """
+    Find a pairing (ie. a set of correspondences) between two images.
+
+    This function uses a RANSAC-style approach finding a suitable pairing.
+
+    """
     stars1 = list(stars1)
     stars2 = list(stars2)
 
@@ -89,8 +95,6 @@ def _find_pairing(stars1, stars2):
                     model.append((s1, s2))
 
         if len(model) >= NUM_STARS_TO_PAIR:
-            if len(model) > NUM_STARS_TO_PAIR:
-                print len(model)
             return model
 
     raise RegistrationFailed
