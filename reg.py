@@ -261,7 +261,7 @@ def _draw_pairing(pairing, im1, im2, stars1, stars2):
     def draw_stars(im, stars, color):
         for s in stars:
             pos = star_pos(s)
-            cv2.circle(im, pos, radius=5, color=color)
+            cv2.circle(im, pos, radius=5, color=color, lineType=cv2.CV_AA)
 
     def output_image(name, im1, im2):
         im = numpy.hstack([im1, im2])
@@ -293,8 +293,10 @@ def _draw_pairing(pairing, im1, im2, stars1, stars2):
         step_num += 1
 
         for idx2, (t1, t2) in enumerate(pairing[:idx]):
-            cv2.line(im1_copy, star_pos(t1), star_pos(s1), LINE_COLOURS[idx2])
-            cv2.line(im2_copy, star_pos(t2), star_pos(s2), LINE_COLOURS[idx2])
+            cv2.line(im1_copy, star_pos(t1), star_pos(s1), LINE_COLOURS[idx2],
+                     lineType=cv2.CV_AA)
+            cv2.line(im2_copy, star_pos(t2), star_pos(s2), LINE_COLOURS[idx2],
+                     lineType=cv2.CV_AA)
         
         output_image("step{}.png".format(step_num), im1_copy, im2_copy)
         step_num += 1
