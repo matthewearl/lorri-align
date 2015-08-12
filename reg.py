@@ -23,9 +23,6 @@
 """
 Routines for registering images, based upon star locations.
 
-This module uses the term "pairing" to mean a list of pairs of stars. A pairing
-gives a partial mapping from stars in one image to stars in another.
-
 """
 
 __all__ = (
@@ -54,15 +51,16 @@ REGISTRATION_RETRIES = 3
 class RegistrationFailed(Exception):
     pass
 
-def _fits_model(pair, pairing):
+def _fits_model(pair, model):
     """
-    Check if a given pair of stars fits the model implied by a given pairing.
+    Check if a given pair of stars fits the model implied by a given sequence
+    of correspondences.
 
     """
     # Check distances from the new star to already paired stars are the same in
     # either image
     s1, s2 = pair
-    for t1, t2 in pairing:
+    for t1, t2 in model:
         if abs(s1.dist(t1) - s2.dist(t2)) > MAX_DISTANCE:
             return False
     return True
@@ -70,11 +68,10 @@ def _fits_model(pair, pairing):
 def _pick_random_model(stars1, stars2):
     return zip(random.sample(stars1, 2), random.sample(stars2, 2))
 
-def _find_pairing(stars1, stars2):
+def _find_correspondences(stars1, stars2):
     """
-    Find a pairing (ie. a set of correspondences) between two images.
-
-    This function uses a RANSAC-style approach finding a suitable pairing.
+    Find a sequence of at least NUM_STARS_TO_PAIR correspondences that form a
+    consistent model.
 
     """
     stars1 = list(stars1)
@@ -99,14 +96,14 @@ def _find_pairing(stars1, stars2):
 
     raise RegistrationFailed
 
-def _transformation_from_pairing(pairing):
+def _transformation_from_correspondences(correspondences):
     """
     Return an affine transformation [R | T] such that:
 
         sum ||R*p1,i + T - p2,i||^2
 
     is minimized. Where p1,i and p2,i is the position vector of the first and
-    second star in the i'th pairing, respectively.
+    second star in the i'th correspondence, respectively.
 
     """
     # The algorithm proceeds by first subtracting the centroid from each set of
@@ -114,8 +111,8 @@ def _transformation_from_pairing(pairing):
     # sought which maps the translated points1 onto points2. The SVD is used to
     # do this. See:
     #   https://en.wikipedia.org/wiki/Orthogonal_Procrustes_problem
-    points1 = numpy.vstack(s1.pos_vec.T for s1, s2 in pairing)
-    points2 = numpy.vstack(s2.pos_vec.T for s1, s2 in pairing)
+    points1 = numpy.vstack(s1.pos_vec.T for s1, s2 in correspondences)
+    points2 = numpy.vstack(s2.pos_vec.T for s1, s2 in correspondences)
 
     def centroid(points):
         return numpy.sum(points, axis=0) / points.shape[0]
@@ -149,7 +146,8 @@ def register_pair(stars1, stars2):
         first image, to star coordinates in the second image.
 
     """
-    return _transformation_from_pairing(_find_pairing(stars1, stars2))
+    return _transformation_from_correspondences(
+                                         _find_correspondences(stars1, stars2))
 
 class RegistrationResult(collections.namedtuple('_RegistrationResultBase',
                             ('exception', 'transform'))):
@@ -205,9 +203,9 @@ def register_many(stars_seq, reference_idx=0):
                                      transform=None)
         registered.append((stars2, (M1 * M2)))
 
-def _draw_pairing(pairing, im1, im2, stars1, stars2):
+def _draw_correspondences(correspondences, im1, im2, stars1, stars2):
     """
-    Produce a sequence of images to illustrate a particular pairing.
+    Produce a sequence of images to illustrate a particular correspondence.
 
     """
     assert im1.shape == im2.shape
@@ -252,7 +250,7 @@ def _draw_pairing(pairing, im1, im2, stars1, stars2):
                     (255, 0, 255),
                     (255, 255, 0)]
 
-    for idx, (s1, s2) in enumerate(pairing):
+    for idx, (s1, s2) in enumerate(correspondences):
         im1_copy = im1.copy()
         im2_copy = im2.copy()
         draw_stars(im1, [s1], color=(255, 255, 0))
@@ -263,7 +261,7 @@ def _draw_pairing(pairing, im1, im2, stars1, stars2):
         output_image("step{}.png".format(step_num), im1_copy, im2_copy)
         step_num += 1
 
-        for idx2, (t1, t2) in enumerate(pairing[:idx]):
+        for idx2, (t1, t2) in enumerate(correspondences[:idx]):
             cv2.line(im1_copy, star_pos(t1), star_pos(s1), LINE_COLOURS[idx2],
                      lineType=cv2.CV_AA)
             cv2.line(im2_copy, star_pos(t2), star_pos(s2), LINE_COLOURS[idx2],
@@ -288,14 +286,14 @@ if __name__ == "__main__":
         A = register_pair(stars1, stars2)
 
         print A
-    if sys.argv[1] == "draw_pairing":
+    if sys.argv[1] == "draw_correspondences":
         im1 = cv2.imread(sys.argv[2], cv2.IMREAD_GRAYSCALE)
         im2 = cv2.imread(sys.argv[3], cv2.IMREAD_GRAYSCALE)
         stars1 = list(stars.extract(im1))
         stars2 = list(stars.extract(im2))
 
-        pairing = _find_pairing(stars1, stars2)
-        _draw_pairing(pairing, im1, im2, stars1, stars2)
+        correspondences = _find_correspondences(stars1, stars2)
+        _draw_correspondences(correspondences, im1, im2, stars1, stars2)
         
     if sys.argv[1] == "register_many":
         fnames = sys.argv[2:]
