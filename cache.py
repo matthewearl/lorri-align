@@ -50,7 +50,7 @@ _IMG_PATH = "data/images/input/"
 IMG_FORMAT = _IMG_PATH + "%Y-%m-%d_%H%M%S_%Z.jpg"
 _METADATA_FILE = _IMG_PATH + "metadata.json"
 
-FETCH_SLEEP = 2.0   # Avoid spamming the server!
+FETCH_SLEEP = 1.0   # Avoid spamming the server!
 MAX_FETCHES = 1000  # Should never need more than this number of HTTP
                     # requests.
 num_fetches = 0
