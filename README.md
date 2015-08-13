@@ -9,7 +9,7 @@ a flyby animation can be produced:
 A smaller animation can be generated with:
 
     ./lorri-align.py --from '2015-04-12 03:27:00' --to '2015-04-18 08:57:30' \
---black-cutoff 10 --crop 323,586,71,87
+        --black-cutoff 10 --crop 323,586,71,87
     convert -delay 5 data/images/stacked/*.png -resize 400x655 anim.gif
 
 ![Smaller animation](http://matthewearl.github.io/assets/lorri-align/anim_small.gif)
