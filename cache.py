@@ -29,8 +29,9 @@ __all__ = (
     'update_metadata',
     'load_metadata',
     'check_images',
-    'MissingImage',
     'IMG_FORMAT',
+    'MissingImage',
+    'NoMetadataFile',
 )
 
 import calendar
@@ -49,7 +50,10 @@ _IMG_PATH = "data/images/input/"
 IMG_FORMAT = _IMG_PATH + "%Y-%m-%d_%H%M%S_%Z.jpg"
 _METADATA_FILE = _IMG_PATH + "metadata.json"
 
-FETCH_SLEEP = 1.0 # Avoid spamming 
+FETCH_SLEEP = 2.0   # Avoid spamming the server!
+MAX_FETCHES = 1000  # Should never need more than this number of HTTP
+                    # requests.
+num_fetches = 0
 
 def _parse_line(line):
     l = []
@@ -61,7 +65,7 @@ def _parse_line(line):
         elif cmd.startswith("UTCArr.push"):
             d["timestamp"] = calendar.timegm(time.strptime(cmd.split('"')[1],
                                              _TIMESTAMP_FORMAT))
-            d["image_path"] = time.strftime(_IMG_FORMAT,
+            d["image_path"] = time.strftime(IMG_FORMAT,
                                             time.gmtime(d["timestamp"]))
         elif cmd.startswith("ExpArr.push"):
             d["exposure"] = cmd.split('"')[1]
@@ -73,10 +77,20 @@ def _parse_line(line):
 class _InvalidPageNum(Exception):
     pass
 
+def _urlopen(url):
+    global num_fetches
+    num_fetches += 1
+
+    assert num_fetches < MAX_FETCHES, ("Too many HTTP requests ({}) "
+                                             "attempted!".format(num_fetches))
+    f = urllib2.urlopen(url)
+    time.sleep(FETCH_SLEEP)
+
+    return f
+
 def _get_data_for_page(page_num):
     print "Fetching page {}".format(page_num)
-    f = urllib2.urlopen(_THUMBNAIL_URL_FORMAT.format(page_num))
-    time.sleep(FETCH_SLEEP)
+    f = _urlopen(_THUMBNAIL_URL_FORMAT.format(page_num))
 
     for line in f.readlines():
         if line.startswith("StatusArr.push"):
@@ -92,13 +106,16 @@ def _metadata_gen():
                 yield d
         except _InvalidPageNum:
             return
-        
+
         page_num += 1
+
+class NoMetadataFile(Exception):
+    pass
 
 def load_metadata():
     """Load and return the meta-data."""
     if not os.path.exists(_METADATA_FILE):
-        return []
+        raise NoMetadataFile("Try running with -u?")
 
     with open(_METADATA_FILE, 'r') as f:
         return json.load(f)
@@ -106,8 +123,11 @@ def load_metadata():
 def update_metadata():
     """Download any missing meta-data from the New Horizon's website."""
 
-    old_metadata = load_metadata()
-    
+    try:
+        old_metadata = load_metadata()
+    except NoMetadataFile:
+        old_metadata = []
+
     updates = []
     for d in _metadata_gen():
         if (len(old_metadata) > 0 and
@@ -123,7 +143,7 @@ def update_metadata():
 def _download_image(d):
     print "Downloading {} to {}".format(d['url'], d["image_path"])
     time.sleep(FETCH_SLEEP)
-    in_f = urllib2.urlopen(d['url'])
+    in_f = _urlopen(d['url'])
     with open(d["image_path"], 'w') as out_f:
         out_f.write(in_f.read())
 
@@ -136,7 +156,7 @@ def check_images(metadata, download_missing=False):
 
     If the `download_missing` argument is False, `MissingImage` is raised for
     any missing images.
-    
+
     """
     for d in metadata:
         if not os.path.exists(d["image_path"]):
